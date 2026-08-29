@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { Blotter } from "@/components/Blotter";
 import { TheProblemSplit } from "@/components/TheProblemSplit";
 import { HowSettlementWorks } from "@/components/HowSettlementWorks";
@@ -15,6 +16,7 @@ import { SettlementDetailModal } from "@/components/SettlementDetailModal";
 import { EligibilityView } from "@/components/EligibilityView";
 import { SettingsView } from "@/components/SettingsView";
 import { DesignSystemView } from "@/components/DesignSystemView";
+import { WalletSignInModal } from "@/components/WalletSignInModal";
 import { ToastAlert } from "@/components/ToastAlert";
 import {
   INITIAL_OFFERINGS,
@@ -22,9 +24,22 @@ import {
   INITIAL_SETTLEMENTS,
   INITIAL_ELIGIBILITY,
   INITIAL_SESSION,
+  generateAssetPerformance,
 } from "@/lib/mockData";
-import { Offering, Holding, SettlementRecord, EligibilityProfile, PartySession } from "@/lib/types";
-import { ArrowRight } from "lucide-react";
+import {
+  Offering,
+  Holding,
+  SettlementRecord,
+  EligibilityProfile,
+  PartySession,
+} from "@/lib/types";
+import {
+  WalletSession,
+  getStoredSession,
+  saveSession,
+  clearSession,
+} from "@/lib/wallet";
+import { ArrowRight, Key, ShieldCheck } from "lucide-react";
 
 export default function Home() {
   const [isAppMode, setIsAppMode] = useState(false);
@@ -36,11 +51,36 @@ export default function Home() {
   const [settlements, setSettlements] = useState<SettlementRecord[]>(INITIAL_SETTLEMENTS);
   const [eligibility, setEligibility] = useState<EligibilityProfile>(INITIAL_ELIGIBILITY);
   const [session, setSession] = useState<PartySession>(INITIAL_SESSION);
+  const [walletSession, setWalletSession] = useState<WalletSession | null>(null);
 
   // Modals
   const [selectedOffering, setSelectedOffering] = useState<Offering | null>(null);
   const [selectedSettlement, setSelectedSettlement] = useState<SettlementRecord | null>(null);
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [newAllocationModalOpen, setNewAllocationModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check if query param ?app=true is present
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("app") === "true") {
+        setIsAppMode(true);
+      }
+      // Check stored session
+      const stored = getStoredSession();
+      if (stored && stored.connected) {
+        setWalletSession(stored);
+        setSession((prev) => ({
+          ...prev,
+          partyId: stored.partyId,
+          partyName: stored.partyName,
+          custodyMode: stored.custodyMode,
+          role: stored.role,
+        }));
+      }
+    }
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -52,6 +92,28 @@ export default function Home() {
   // User USDC balance from holdings
   const usdcHolding = holdings.find((h) => h.instrumentSymbol === "USDC");
   const userUsdcBalance = usdcHolding ? usdcHolding.units : 0;
+
+  // Handle wallet connected
+  const handleWalletConnected = (ws: WalletSession) => {
+    setWalletSession(ws);
+    setSession((prev) => ({
+      ...prev,
+      partyId: ws.partyId,
+      partyName: ws.partyName,
+      custodyMode: ws.custodyMode,
+      role: ws.role,
+    }));
+    setIsAppMode(true);
+    showToast(`Connected: ${ws.partyName} (${ws.partyId.slice(0, 16)}…)`);
+  };
+
+  // Handle wallet disconnect
+  const handleWalletDisconnect = () => {
+    clearSession();
+    setWalletSession(null);
+    setSession(INITIAL_SESSION);
+    showToast("Disconnected from Canton session");
+  };
 
   // Handle successful subscribe
   const handleSubscribeSuccess = (offering: Offering, units: number, consideration: number) => {
@@ -69,7 +131,6 @@ export default function Home() {
 
     // 2. Update holdings
     setHoldings((prev) => {
-      // Deduct USDC
       const updated = prev.map((h) => {
         if (h.instrumentSymbol === "USDC") {
           return {
@@ -90,19 +151,20 @@ export default function Home() {
         return h;
       });
 
-      // If holding didn't exist yet, add it
       const exists = prev.some((h) => h.instrumentSymbol === offering.instrument.symbol);
       if (!exists) {
+        const kindType = offering.instrument.kind === "fund_unit" ? "Fund Units" : "Equity";
         updated.push({
           id: `h-${offering.id}`,
           instrumentSymbol: offering.instrument.symbol,
           name: offering.title,
-          type: offering.instrument.kind === "fund_unit" ? "Fund Units" : "Equity",
+          type: kindType,
           units: units,
           valuationUsdc: consideration,
           contractCount: 1,
           state: newState,
           contractCids: [`00${Math.random().toString(16).slice(2, 10)}`],
+          ...generateAssetPerformance(offering.instrument.symbol, units, consideration, kindType),
         });
       }
       return updated;
@@ -171,7 +233,6 @@ export default function Home() {
       })
     );
 
-    // Update corresponding holding state to settled
     const targetSettlement = settlements.find((s) => s.id === id);
     if (targetSettlement) {
       setHoldings((prev) =>
@@ -187,7 +248,9 @@ export default function Home() {
   // Handle cancel settlement
   const handleCancelSettlement = (id: string) => {
     setSettlements((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, state: "rejected", errorCode: "INSTRUCTION_CANCELLED_BY_PARTY" } : s))
+      prev.map((s) =>
+        s.id === id ? { ...s, state: "rejected", errorCode: "INSTRUCTION_CANCELLED_BY_PARTY" } : s
+      )
     );
     showToast("Instruction cancelled");
   };
@@ -200,7 +263,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-ink text-paper flex flex-col justify-between selection:bg-brand selection:text-paper">
+    <div className="min-h-screen bg-[#07080d] text-paper flex flex-col justify-between selection:bg-brand selection:text-paper">
       {/* Universal Header */}
       <AppHeader
         activeTab={activeTab}
@@ -208,6 +271,12 @@ export default function Home() {
         partyId={session.partyId}
         isAppMode={isAppMode}
         onToggleAppMode={() => setIsAppMode(!isAppMode)}
+        walletSession={walletSession}
+        onWalletConnected={handleWalletConnected}
+        onWalletDisconnect={handleWalletDisconnect}
+        onOpenNewAllocation={() => {
+          setActiveTab("offerings");
+        }}
       />
 
       {/* Main Content Area */}
@@ -234,21 +303,22 @@ export default function Home() {
                 <div className="mt-4 flex flex-wrap items-center gap-4">
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsAppMode(true);
-                      setActiveTab("offerings");
-                    }}
-                    className="bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:opacity-90 transition-opacity flex items-center gap-2"
+                    onClick={() => setWalletModalOpen(true)}
+                    className="bg-brand px-5 py-2.5 text-sm font-semibold text-paper hover:opacity-90 transition-opacity flex items-center gap-2 shadow-lg"
                   >
-                    Request access <ArrowRight className="w-4 h-4" />
+                    <Key className="w-4 h-4" /> Connect Wallet & Sign In
                   </button>
 
-                  <a
-                    href="#offerings"
-                    className="border border-withheld bg-slate px-5 py-2.5 text-sm font-medium text-paper hover:bg-ink transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAppMode(true);
+                      setActiveTab("portfolio");
+                    }}
+                    className="border border-withheld bg-[#141722] px-5 py-2.5 text-sm font-medium text-paper hover:bg-[#1a1e2d] transition-colors flex items-center gap-1.5"
                   >
-                    View offerings
-                  </a>
+                    Explore Demo Dashboard <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
@@ -283,9 +353,9 @@ export default function Home() {
           </main>
         ) : (
           /* =========================================================================
-             APPLICATION DASHBOARD VIEW (Screens 01 - 09)
+             APPLICATION DASHBOARD VIEW (Full Screen Dashboard)
              ========================================================================= */
-          <div className="mx-auto max-w-[1240px] px-4 sm:px-6 py-8">
+          <div className="mx-auto max-w-[1280px] px-4 sm:px-6 py-8">
             {activeTab === "portfolio" && (
               <PortfolioView
                 holdings={holdings}
@@ -301,6 +371,7 @@ export default function Home() {
               <OfferingsView
                 offerings={offerings}
                 onSelectOffering={(offering) => setSelectedOffering(offering)}
+                onStartKyc={() => setActiveTab("eligibility")}
               />
             )}
 
@@ -323,12 +394,11 @@ export default function Home() {
               <SettingsView
                 session={session}
                 onTogglePreApproval={handleTogglePreApproval}
+                onSignOut={handleWalletDisconnect}
               />
             )}
 
-            {activeTab === "design-system" && (
-              <DesignSystemView />
-            )}
+            {activeTab === "design-system" && <DesignSystemView />}
           </div>
         )}
       </div>
@@ -353,13 +423,20 @@ export default function Home() {
         />
       )}
 
+      {/* Wallet Sign In Modal */}
+      <WalletSignInModal
+        isOpen={walletModalOpen}
+        onClose={() => setWalletModalOpen(false)}
+        onSuccess={handleWalletConnected}
+      />
+
       {/* Toast Feedback */}
       {toastMessage && (
         <ToastAlert message={toastMessage} onDismiss={() => setToastMessage(null)} />
       )}
 
       {/* Global Institutional Footer */}
-      <div className="mx-auto max-w-[1100px] w-full px-4 sm:px-6">
+      <div className="mx-auto max-w-[1280px] w-full px-4 sm:px-6">
         <Footer />
       </div>
     </div>

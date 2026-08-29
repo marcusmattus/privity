@@ -1,177 +1,228 @@
 "use client";
+
 import { useState } from "react";
 import { Offering } from "@/lib/types";
 import { StatePill } from "./StatePill";
 import { Figure } from "./Figure";
 import { PartyId } from "./PartyId";
-import { Filter, Search, ArrowUpDown, ChevronRight } from "lucide-react";
+import {
+  Filter,
+  Search,
+  ArrowUpDown,
+  ChevronRight,
+  ShieldCheck,
+  ShieldAlert,
+  Clock,
+  Lock,
+  ArrowRight,
+  ArrowUpRight,
+  Sparkles,
+  Layers,
+} from "lucide-react";
 
 export function OfferingsView({
   offerings,
   onSelectOffering,
+  onStartKyc,
 }: {
   offerings: Offering[];
   onSelectOffering: (offering: Offering) => void;
+  onStartKyc?: () => void;
 }) {
-  const [filterType, setFilterType] = useState<"all" | "equity" | "fund_unit">("all");
-  const [sortBy, setSortBy] = useState<"newest" | "size">("newest");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredOfferings = offerings
-    .filter((o) => {
-      if (filterType !== "all" && o.instrument.kind !== filterType) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return (
-          o.title.toLowerCase().includes(q) ||
-          o.subtitle.toLowerCase().includes(q) ||
-          o.instrument.symbol.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      if (sortBy === "size") {
-        return b.totalUnits - a.totalUnits;
-      }
-      return 0; // maintain default order
-    });
+  const filteredOfferings = offerings.filter((o) => {
+    if (filterType !== "all" && o.instrument.kind !== filterType) return false;
+    if (filterStatus === "open" && o.status !== "open") return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        o.title.toLowerCase().includes(q) ||
+        o.subtitle.toLowerCase().includes(q) ||
+        o.instrument.symbol.toLowerCase().includes(q) ||
+        o.description.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
-      {/* Top Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-withheld pb-4">
+      {/* Top Header & Search Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-withheld pb-5">
         <div>
-          <h2 className="font-display text-xl font-bold text-paper">Open Offerings</h2>
-          <p className="text-xs text-paper/60 mt-0.5">
-            Tokenised private equity and fund unit allocations with atomic Canton settlement
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-2xl font-bold text-paper">Market Offerings</h1>
+            <span className="figure text-[10px] text-brand bg-brand/10 border border-brand/25 px-2 py-0.5 uppercase tracking-wider">
+              Canton Syndications
+            </span>
+          </div>
+          <p className="text-xs text-paper/65 mt-1">
+            Institutional grade instruments and syndications settled atomically on private Canton ledger.
           </p>
         </div>
 
-        {/* Controls */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Type Filter */}
-          <div className="flex items-center border border-withheld bg-slate p-0.5 text-xs figure">
-            <button
-              onClick={() => setFilterType("all")}
-              className={`px-3 py-1 transition-colors ${
-                filterType === "all" ? "bg-brand text-paper" : "text-paper/60 hover:text-paper"
-              }`}
-            >
-              All Types
-            </button>
-            <button
-              onClick={() => setFilterType("equity")}
-              className={`px-3 py-1 transition-colors ${
-                filterType === "equity" ? "bg-brand text-paper" : "text-paper/60 hover:text-paper"
-              }`}
-            >
-              Equity
-            </button>
-            <button
-              onClick={() => setFilterType("fund_unit")}
-              className={`px-3 py-1 transition-colors ${
-                filterType === "fund_unit" ? "bg-brand text-paper" : "text-paper/60 hover:text-paper"
-              }`}
-            >
-              Fund Units
-            </button>
+        {/* Filter Controls matching screenshot */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Search Box */}
+          <div className="relative flex-1 sm:w-56">
+            <Search className="w-3.5 h-3.5 text-paper/40 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search SYMBOL..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#141722] border border-withheld pl-8 pr-3 py-1.5 text-xs text-paper placeholder:text-paper/35 focus:outline-none focus:border-brand"
+            />
           </div>
 
-          {/* Sort By */}
-          <div className="flex items-center gap-1.5 border border-withheld bg-slate px-3 py-1.5 text-xs figure text-paper/70">
-            <ArrowUpDown className="w-3.5 h-3.5" />
+          {/* Instrument Kind Filter */}
+          <div className="border border-withheld bg-[#141722] px-2.5 py-1.5 text-xs figure text-paper/70">
             <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as "newest" | "size")}
-              className="bg-transparent text-paper focus:outline-none cursor-pointer"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-transparent text-paper focus:outline-none cursor-pointer text-xs"
             >
-              <option value="newest" className="bg-slate text-paper">Sort: Newest</option>
-              <option value="size" className="bg-slate text-paper">Sort: Tranche Size</option>
+              <option value="all" className="bg-[#141722] text-paper">All Instruments</option>
+              <option value="equity" className="bg-[#141722] text-paper">Tokenized Equity</option>
+              <option value="fund_unit" className="bg-[#141722] text-paper">Fund Units</option>
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div className="border border-withheld bg-[#141722] px-2.5 py-1.5 text-xs figure text-paper/70">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-transparent text-paper focus:outline-none cursor-pointer text-xs"
+            >
+              <option value="all" className="bg-[#141722] text-paper">Status: All</option>
+              <option value="open" className="bg-[#141722] text-paper">Status: Open</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Offerings List / Cards */}
-      <div className="space-y-4">
+      {/* Grid of Institutional Offering Cards matching screenshot */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {filteredOfferings.map((offering) => {
-          const progress = Math.round(
-            ((offering.totalUnits - offering.unitsRemaining) / offering.totalUnits) * 100
-          );
+          const filledUnits = offering.totalUnits - offering.unitsRemaining;
+          const progress = Math.min(100, Math.round((filledUnits / offering.totalUnits) * 100));
+          const isEligible = offering.requiredTier !== "Tier 3 Institutional";
+          const isClosingSoon = offering.closingDate.includes("May") || offering.closingDate.includes("Jun");
 
           return (
             <div
               key={offering.id}
-              onClick={() => onSelectOffering(offering)}
-              className="border border-withheld bg-slate p-6 hover:border-brand/60 transition-all cursor-pointer group"
+              className="border border-withheld bg-[#0e1017] hover:border-brand/50 transition-all p-6 flex flex-col justify-between space-y-5 group relative overflow-hidden"
             >
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                {/* Left info */}
-                <div className="space-y-2 max-w-[460px]">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-display text-lg font-bold text-paper group-hover:text-brand transition-colors">
-                      {offering.title}
-                    </h3>
-                    <StatePill state={offering.transferKind === "direct" ? "direct" : "offer"} />
+              {/* Subtle hover gradient indicator */}
+              <div className="absolute top-0 left-0 right-0 h-[2px] bg-transparent group-hover:bg-brand transition-colors" />
+
+              <div className="space-y-3.5">
+                {/* Header Tag + Status Badge */}
+                <div className="flex items-center justify-between">
+                  <div className="border border-withheld bg-[#141722] px-2.5 py-1 text-[11px] font-mono font-bold text-paper">
+                    {offering.instrument.symbol}
                   </div>
-                  <p className="text-xs text-paper/70 leading-relaxed">
-                    {offering.subtitle}
+
+                  {isEligible ? (
+                    <span className="figure text-[10px] font-semibold uppercase tracking-wider text-settled bg-settled/10 border border-settled/30 px-2 py-0.5 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" /> Eligible
+                    </span>
+                  ) : (
+                    <span className="figure text-[10px] font-semibold uppercase tracking-wider text-pending bg-pending/10 border border-pending/30 px-2 py-0.5 flex items-center gap-1">
+                      <ShieldAlert className="w-3 h-3" /> Verification Req
+                    </span>
+                  )}
+                </div>
+
+                {/* Offering Title & Description */}
+                <div>
+                  <h3 className="font-display text-lg font-bold text-paper group-hover:text-brand transition-colors">
+                    {offering.title}
+                  </h3>
+                  <p className="text-xs text-paper/70 mt-1 leading-relaxed line-clamp-2">
+                    {offering.description}
                   </p>
-                  <div className="flex items-center gap-4 text-xs figure text-paper/50 pt-1">
-                    <span>Jurisdiction: <strong className="text-paper">{offering.instrument.jurisdiction}</strong></span>
-                    <span>Closing: <strong className="text-paper">{offering.closingDate}</strong></span>
+                </div>
+
+                {/* Stats Matrix */}
+                <div className="grid grid-cols-2 gap-3 bg-[#131620] p-3.5 border border-withheld/60 text-xs">
+                  <div>
+                    <span className="text-[10px] figure uppercase tracking-wider text-paper/50 block">
+                      PRICE / UNIT
+                    </span>
+                    <span className="font-mono font-bold text-paper text-sm">
+                      ${offering.pricePerUnit.toFixed(2)} USDC
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] figure uppercase tracking-wider text-paper/50 block">
+                      CLOSE DATE
+                    </span>
+                    <span className="font-mono text-paper/90 text-xs flex items-center gap-1 mt-0.5">
+                      {isClosingSoon && <Clock className="w-3 h-3 text-pending inline" />}
+                      {offering.closingDate}
+                    </span>
                   </div>
                 </div>
 
-                {/* Center metrics */}
-                <div className="grid grid-cols-3 gap-6 text-xs bg-ink/30 px-5 py-3 border border-withheld/40">
-                  <div>
-                    <span className="text-[11px] figure text-paper/50 block">Min. allocation</span>
-                    <Figure value={offering.minAllocationUsdc} unit="USDC" className="font-semibold text-paper" />
+                {/* Capacity Progress Bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] figure">
+                    <span className="text-paper/50">CAPACITY</span>
+                    <span className="text-paper/80 font-mono font-medium">
+                      {offering.unitsRemaining.toLocaleString()} / {offering.totalUnits.toLocaleString()} Units Remaining
+                    </span>
                   </div>
-                  <div>
-                    <span className="text-[11px] figure text-paper/50 block">Tranche Size</span>
-                    <Figure value={offering.totalUnits} unit="USDC" className="font-semibold text-paper" />
-                  </div>
-                  <div>
-                    <span className="text-[11px] figure text-paper/50 block">Price per unit</span>
-                    <Figure value={offering.pricePerUnit} unit="USDC" className="font-semibold text-paper" />
+                  <div className="w-full bg-withheld/80 h-1.5">
+                    <div
+                      className={`h-1.5 transition-all ${
+                        progress > 75 ? "bg-pending" : "bg-[#D4BBFF]"
+                      }`}
+                      style={{ width: `${progress}%` }}
+                    />
                   </div>
                 </div>
+              </div>
 
-                {/* Right action */}
-                <div className="flex items-center gap-4 lg:flex-col lg:items-end justify-between">
-                  <div className="w-32 lg:w-40">
-                    <div className="flex justify-between text-[11px] figure text-paper/50 mb-1">
-                      <span>{progress}% filled</span>
-                      <span><Figure value={offering.unitsRemaining} /> left</span>
-                    </div>
-                    <div className="w-full bg-withheld h-1">
-                      <div className="bg-brand h-1" style={{ width: `${progress}%` }} />
-                    </div>
-                  </div>
-
+              {/* Action Button */}
+              <div className="pt-2">
+                {isEligible ? (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectOffering(offering);
-                    }}
-                    className="bg-brand px-4 py-2 text-xs font-semibold text-paper hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                    onClick={() => onSelectOffering(offering)}
+                    className="w-full bg-[#D4BBFF] hover:bg-[#c4a5f8] text-[#151226] font-semibold text-xs py-2.5 px-4 transition-colors flex items-center justify-center gap-2 shadow-sm"
                   >
-                    Subscribe <ChevronRight className="w-3.5 h-3.5" />
+                    <span>View Offering Documents & Subscribe</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
-                </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onStartKyc ? onStartKyc() : onSelectOffering(offering)}
+                    className="w-full border border-withheld bg-[#141722] hover:bg-[#1a1e2d] text-paper font-semibold text-xs py-2.5 px-4 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-pending" />
+                    <span>Tier 3 Institutional Verification Req</span>
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="border border-withheld bg-slate p-4 flex items-center justify-between text-xs text-paper/50 figure">
-        <span>Showing {filteredOfferings.length} of {offerings.length} total offerings</span>
-        <span>All subscriptions settled atomically via Daml DvP</span>
+      {/* Footer Info */}
+      <div className="border border-withheld bg-[#0e1017] p-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-paper/50 figure">
+        <span>Showing {filteredOfferings.length} institutional syndication tranches</span>
+        <span className="flex items-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-settled" />
+          <span>Atomic delivery vs payment (DvP) enforced by Canton smart contracts</span>
+        </span>
       </div>
     </div>
   );

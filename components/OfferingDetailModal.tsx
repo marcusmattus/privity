@@ -1,10 +1,23 @@
 "use client";
+
 import { useState } from "react";
 import { Offering } from "@/lib/types";
-import { StatePill } from "./StatePill";
 import { Figure } from "./Figure";
 import { PartyId } from "./PartyId";
-import { AlertTriangle, CheckCircle, Clock, ShieldCheck, X, ArrowRight } from "lucide-react";
+import { StatePill } from "./StatePill";
+import {
+  X,
+  Layers,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
+  Check,
+  ArrowRight,
+  Lock,
+  ExternalLink,
+  Info,
+} from "lucide-react";
 
 export function OfferingDetailModal({
   offering,
@@ -17,413 +30,310 @@ export function OfferingDetailModal({
   onClose: () => void;
   onSubscribeSuccess: (offering: Offering, units: number, consideration: number) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"overview" | "terms" | "documents">("overview");
-  const [unitsInput, setUnitsInput] = useState<string>(
-    offering.minAllocationUsdc.toString()
+  const [requestedUnits, setRequestedUnits] = useState<number>(
+    Math.max(offering.minAllocationUsdc, 50000)
   );
-  const [subscribeState, setSubscribeState] = useState<
-    "idle" | "quoted" | "confirming" | "submitting" | "settled" | "failed"
-  >("quoted");
-  const [riskConfirmed, setRiskConfirmed] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [settledTxHash, setSettledTxHash] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedContract, setCopiedContract] = useState(false);
+  const [executionError, setExecutionError] = useState<string | null>(null);
 
-  const unitsNum = parseFloat(unitsInput) || 0;
-  const consideration = unitsNum * offering.pricePerUnit;
-  const isEligible = true; // Tier 2 Professional is eligible for these
-  const isValidAmount = unitsNum >= offering.minAllocationUsdc && unitsNum <= offering.unitsRemaining;
-  const hasSufficientUsdc = userUsdcBalance >= consideration;
+  const pricePerUnit = offering.pricePerUnit;
+  const grossConsideration = requestedUnits * pricePerUnit;
+  const platformFee = grossConsideration * 0.001; // 0.1% platform fee
+  const netTotalConsideration = grossConsideration + platformFee;
 
-  const handleReview = () => {
-    if (!isValidAmount || !hasSufficientUsdc) return;
-    setSubscribeState("confirming");
+  const hasSufficientFunds = userUsdcBalance >= netTotalConsideration;
+  const satisfiesMinAllocation = requestedUnits >= offering.minAllocationUsdc;
+  const satisfiesCapacity = requestedUnits <= offering.unitsRemaining;
+
+  const contractAddress = `0x7a2${Math.random().toString(16).slice(2, 6)}4f9C${Math.random().toString(16).slice(2, 6)}`;
+
+  const handleCopyContract = () => {
+    navigator.clipboard.writeText(contractAddress);
+    setCopiedContract(true);
+    setTimeout(() => setCopiedContract(false), 2000);
   };
 
-  const handleConfirmSubscribe = async () => {
-    if (!riskConfirmed) return;
-    setSubscribeState("submitting");
-    setErrorMessage(null);
-
-    // Simulate real ledger atomic DvP execution against Canton Ledger API
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 2200));
-
-      const mockCid = `00${Math.random().toString(16).slice(2, 10)}${Math.random().toString(16).slice(2, 10)}`;
-      setSettledTxHash(mockCid);
-      setSubscribeState("settled");
-      onSubscribeSuccess(offering, unitsNum, consideration);
-    } catch {
-      setErrorMessage("DAML_PRECONDITION_FAILED: Validator rejected atomic swap.");
-      setSubscribeState("failed");
+  const handleSubscribe = async () => {
+    if (!satisfiesMinAllocation) {
+      setExecutionError(`Minimum subscription is ${offering.minAllocationUsdc.toLocaleString()} units.`);
+      return;
     }
+    if (!satisfiesCapacity) {
+      setExecutionError(`Exceeds tranche capacity (${offering.unitsRemaining.toLocaleString()} units remaining).`);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setExecutionError(null);
+
+    // Simulate Daml command execution & atomic swap
+    setTimeout(() => {
+      setIsSubmitting(false);
+      onSubscribeSuccess(offering, requestedUnits, netTotalConsideration);
+      onClose();
+    }, 1200);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="border border-withheld bg-slate max-w-[960px] w-full my-8 shadow-2xl relative">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-withheld px-6 py-4 bg-ink/50">
-          <div className="flex items-center gap-3">
-            <h2 className="font-display text-xl font-bold text-paper">
-              {offering.title}
-            </h2>
-            <StatePill state={offering.transferKind === "direct" ? "direct" : "offer"} />
-            <span className="text-xs text-paper/60 border-l border-withheld pl-3">
-              {offering.subtitle}
-            </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+      <div className="relative w-full max-w-[960px] border border-withheld bg-[#0e1017] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+        {/* Top Header */}
+        <div className="border-b border-withheld bg-[#131620] px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2 text-xs figure text-paper/60">
+            <span>Offerings</span>
+            <span>&gt;</span>
+            <span className="text-brand font-mono font-semibold">{offering.instrument.symbol}</span>
           </div>
-
           <button
             type="button"
             onClick={onClose}
-            className="text-paper/60 hover:text-paper p-1 transition-colors"
+            className="text-paper/50 hover:text-paper p-1 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12">
-          {/* Left details column (7 cols) */}
-          <div className="lg:col-span-7 p-6 border-b lg:border-b-0 lg:border-r border-withheld space-y-6">
-            {/* Tabs */}
-            <div className="flex items-center gap-6 border-b border-withheld text-xs figure">
-              {(["overview", "terms", "documents"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`pb-3 capitalize transition-colors ${
-                    activeTab === tab
-                      ? "border-b-2 border-brand text-paper font-semibold"
-                      : "text-paper/50 hover:text-paper"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
+        {/* Scrollable Modal Content */}
+        <div className="p-6 sm:p-8 overflow-y-auto space-y-6">
+          {/* Headline */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-withheld pb-5">
+            <div>
+              <h2 className="font-display text-2xl sm:text-3xl font-bold text-paper">
+                {offering.title}
+              </h2>
+              <p className="text-xs text-paper/70 mt-1">{offering.subtitle}</p>
             </div>
-
-            {activeTab === "overview" && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-display text-sm font-semibold text-paper">
-                    Allocation Overview
-                  </h3>
-                  <p className="mt-2 text-xs text-paper/70 leading-relaxed">
-                    {offering.description}
-                  </p>
-                </div>
-
-                {/* Key Term Matrix */}
-                <div className="grid grid-cols-2 gap-3 text-xs bg-ink/40 p-4 border border-withheld/50">
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Tranche Size</span>
-                    <Figure value={offering.totalUnits} unit="USDC" className="font-semibold text-paper" />
-                  </div>
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Min. Allocation</span>
-                    <Figure value={offering.minAllocationUsdc} unit="USDC" className="font-semibold text-paper" />
-                  </div>
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Price per Unit</span>
-                    <Figure value={offering.pricePerUnit} unit="USDC / unit" className="font-semibold text-paper" />
-                  </div>
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Instrument</span>
-                    <span className="figure font-semibold text-paper capitalize">{offering.instrument.kind}</span>
-                  </div>
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Jurisdiction</span>
-                    <span className="figure font-semibold text-paper">{offering.instrument.jurisdiction}</span>
-                  </div>
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Closing Date</span>
-                    <span className="figure font-semibold text-paper">{offering.closingDate}</span>
-                  </div>
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Settlement Model</span>
-                    <span className="figure font-semibold text-settled">{offering.settlementType}</span>
-                  </div>
-                  <div>
-                    <span className="text-paper/50 text-[11px] block">Pre-Approval</span>
-                    <span className="figure font-semibold text-paper">
-                      {offering.preApprovalRequired ? "Required" : "Pre-approved (Direct)"}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-display text-sm font-semibold text-paper">
-                    Issuer Party
-                  </h3>
-                  <div className="mt-2 bg-ink/70 p-3 border border-withheld flex items-center justify-between text-xs">
-                    <PartyId value={offering.instrument.issuerParty} />
-                    <span className="figure text-[11px] text-paper/50">Canton Validator Node</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "terms" && (
-              <div className="space-y-4 text-xs text-paper/70 leading-relaxed">
-                <h3 className="font-display text-sm font-semibold text-paper">Settlement Mechanics</h3>
-                <p>
-                  1. <strong>Atomic DvP:</strong> Both the delivery of tokenised allocation units and the payment in USDC are executed in a single atomic transaction on the Canton Network. If either leg fails, the entire transaction aborts with zero balance loss.
-                </p>
-                <p>
-                  2. <strong>Confidentiality:</strong> Only you and the issuer node witness the contract creation and holding transfer. No other participant receives the transaction stream.
-                </p>
-                <p>
-                  3. <strong>Precondition Check:</strong> Your active Daml Eligibility contract is cryptographically validated by the ledger engine prior to swap execution.
-                </p>
-              </div>
-            )}
-
-            {activeTab === "documents" && (
-              <div className="space-y-3 text-xs">
-                <div className="flex items-center justify-between border border-withheld p-3 bg-ink/40">
-                  <div>
-                    <span className="font-medium text-paper block">Term Sheet & Tranche Allocation.pdf</span>
-                    <span className="text-[11px] text-paper/50">1.4 MB · SHA-256 Verified</span>
-                  </div>
-                  <span className="figure text-brand hover:underline cursor-pointer text-xs">Download</span>
-                </div>
-                <div className="flex items-center justify-between border border-withheld p-3 bg-ink/40">
-                  <div>
-                    <span className="font-medium text-paper block">Daml Smart Contract Specification (v0.1.0).pdf</span>
-                    <span className="text-[11px] text-paper/50">840 KB · CIP-103 Schema</span>
-                  </div>
-                  <span className="figure text-brand hover:underline cursor-pointer text-xs">Download</span>
-                </div>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <span className="border border-withheld bg-[#141722] px-3 py-1 font-mono text-xs text-paper font-semibold">
+                {offering.instrument.symbol}
+              </span>
+              <span className="border border-brand/30 bg-brand/10 px-3 py-1 text-[11px] figure font-semibold text-brand uppercase">
+                {offering.settlementType}
+              </span>
+            </div>
           </div>
 
-          {/* Right subscribe interactive panel (5 cols) */}
-          <div className="lg:col-span-5 p-6 bg-ink/30 flex flex-col justify-between">
-            {subscribeState === "quoted" && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-display text-sm font-bold text-paper">
-                    Subscribe to Offering
-                  </h3>
-                  <p className="text-xs text-paper/60 mt-0.5">
-                    Atomic Delivery-versus-Payment (DvP)
+          {/* Two-Column Grid matching screenshot */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Details & Settlement Mechanics (7 cols) */}
+            <div className="lg:col-span-7 space-y-6">
+              {/* Box 1: Instrument Details */}
+              <div className="border border-withheld bg-[#141722] p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-withheld pb-3">
+                  <span className="figure text-[10px] font-bold uppercase tracking-wider text-brand">
+                    INSTRUMENT DETAILS
+                  </span>
+                  <span className="figure text-[10px] text-settled uppercase font-semibold px-2 py-0.5 bg-settled/10 border border-settled/30">
+                    Status: OPEN
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs bg-[#0b0d14] p-3.5 border border-withheld/50">
+                  <div>
+                    <span className="text-[10px] figure text-paper/50 block">Issuer</span>
+                    <span className="font-semibold text-paper text-xs">{offering.instrument.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] figure text-paper/50 block">Type</span>
+                    <span className="font-semibold text-paper text-xs capitalize">
+                      Tokenized {offering.instrument.kind.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] figure text-paper/50 block">Total Tranche Supply</span>
+                    <span className="font-mono text-paper text-xs font-semibold">
+                      {offering.totalUnits.toLocaleString()} Units
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] figure text-paper/50 block">Jurisdiction</span>
+                    <span className="font-semibold text-paper text-xs">{offering.instrument.jurisdiction}</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-paper/70 leading-relaxed">
+                  {offering.description} This instrument utilizes standard Daml ERC-3643 compliance logic for on-chain cryptographic identity and transfer restrictions on Canton.
+                </p>
+              </div>
+
+              {/* Box 2: Settlement Mechanics */}
+              <div className="border border-withheld bg-[#141722] p-5 space-y-4">
+                <span className="figure text-[10px] font-bold uppercase tracking-wider text-brand block">
+                  SETTLEMENT MECHANICS
+                </span>
+
+                <div className="bg-brand/10 border border-brand/30 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-paper">
+                    <Layers className="w-4 h-4 text-brand" />
+                    <span>Atomic Swap Delivery vs Payment (DvP)</span>
+                  </div>
+                  <p className="text-xs text-paper/80 leading-relaxed">
+                    Subscription requires a signed quote commitment. Settlement occurs atomically via a smart contract executing Delivery vs Payment. If sufficient consideration (USDC) is not present in the settling wallet at execution, the transaction reverts entirely. No partial fills are supported in this phase.
                   </p>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider figure text-paper/60 mb-1.5">
-                      Units to subscribe
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={offering.minAllocationUsdc}
-                        max={offering.unitsRemaining}
-                        step={1000}
-                        value={unitsInput}
-                        onChange={(e) => setUnitsInput(e.target.value)}
-                        className="w-full bg-slate border border-withheld px-3 py-2 text-sm figure text-paper focus:outline-none focus:border-brand"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs text-paper/40 figure">
-                        Units
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[11px] figure text-paper/50 mt-1">
-                      <span>Min: <Figure value={offering.minAllocationUsdc} /></span>
-                      <span>Max: <Figure value={offering.unitsRemaining} /></span>
-                    </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center border-b border-withheld/50 pb-2">
+                    <span className="text-paper/50">Settlement Asset</span>
+                    <span className="font-mono font-semibold text-paper">USDC (Canton LocalNet)</span>
                   </div>
-
-                  {/* Quote breakdown */}
-                  <div className="border border-withheld bg-slate p-4 space-y-2.5 text-xs">
-                    <div className="flex justify-between text-paper/60">
-                      <span>Unit Price</span>
-                      <Figure value={offering.pricePerUnit} unit="USDC" className="text-paper" />
-                    </div>
-                    <div className="flex justify-between text-paper/60">
-                      <span>Consideration</span>
-                      <Figure value={consideration} unit="USDC" className="font-semibold text-paper" />
-                    </div>
-                    <div className="flex justify-between text-paper/60">
-                      <span>Settlement Fee</span>
-                      <span className="figure text-paper">0.00 USDC (0%)</span>
-                    </div>
-                    <div className="border-t border-withheld pt-2 flex justify-between font-semibold text-paper">
-                      <span>Total Payment</span>
-                      <Figure value={consideration} unit="USDC" className="text-brand" />
-                    </div>
-                  </div>
-
-                  {/* Eligibility check badge */}
-                  <div className="flex items-center gap-2 bg-settled/[0.06] border border-settled/30 p-2.5 text-xs text-settled figure">
-                    <ShieldCheck className="w-4 h-4 flex-shrink-0" />
-                    <span>Daml Eligibility verified: Tier 2 Professional</span>
-                  </div>
-
-                  {!hasSufficientUsdc && (
-                    <div className="text-xs text-[#e05252] bg-[#e05252]/10 border border-[#e05252]/30 p-2.5">
-                      Insufficient USDC holding balance (Available: <Figure value={userUsdcBalance} unit="USDC" />)
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleReview}
-                  disabled={!isValidAmount || !hasSufficientUsdc}
-                  className="w-full bg-brand py-2.5 px-4 text-xs font-semibold text-paper hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-2"
-                >
-                  Review subscription <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* High Risk Confirmation Modal */}
-            {subscribeState === "confirming" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-2.5 text-[#e05252]">
-                  <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                  <div>
-                    <h3 className="font-display text-sm font-bold text-paper">
-                      High-risk transaction
-                    </h3>
-                    <p className="text-[11px] text-paper/60">
-                      Atomic DvP settlement is irreversible.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="border border-withheld bg-slate p-4 space-y-2 text-xs">
-                  <div className="flex justify-between text-paper/60">
-                    <span>Offering</span>
-                    <span className="figure font-medium text-paper">{offering.title}</span>
-                  </div>
-                  <div className="flex justify-between text-paper/60">
-                    <span>Units</span>
-                    <Figure value={unitsNum} className="text-paper font-semibold" />
-                  </div>
-                  <div className="flex justify-between text-paper/60">
-                    <span>Total Consideration</span>
-                    <Figure value={consideration} unit="USDC" className="text-paper font-semibold" />
-                  </div>
-                  <div className="flex justify-between text-paper/60">
-                    <span>Counterparty</span>
-                    <PartyId value={offering.instrument.issuerParty} />
-                  </div>
-                </div>
-
-                <div className="bg-[#e05252]/10 border border-[#e05252]/30 p-3 text-xs text-paper/80 leading-relaxed">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={riskConfirmed}
-                      onChange={(e) => setRiskConfirmed(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-withheld bg-slate accent-brand"
-                    />
-                    <span>
-                      I confirm I have reviewed the offering terms. I understand this settles atomically on Canton and cannot be reversed.
+                  <div className="flex justify-between items-center border-b border-withheld/50 pb-2">
+                    <span className="text-paper/50">Min. Subscription</span>
+                    <span className="font-mono font-semibold text-paper">
+                      {offering.minAllocationUsdc.toLocaleString()} Units (${offering.minAllocationUsdc.toLocaleString()} USDC)
                     </span>
-                  </label>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSubscribeState("quoted")}
-                    className="flex-1 border border-withheld bg-slate py-2.5 text-xs text-paper hover:bg-ink transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmSubscribe}
-                    disabled={!riskConfirmed}
-                    className="flex-1 bg-brand py-2.5 text-xs font-semibold text-paper hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-                  >
-                    Confirm & subscribe
-                  </button>
+                  </div>
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="text-paper/50">Execution Smart Contract</span>
+                    <div className="flex items-center gap-1.5 font-mono text-[11px] text-paper/80 bg-[#0b0d14] px-2 py-1 border border-withheld">
+                      <span>{contractAddress}</span>
+                      <button
+                        type="button"
+                        onClick={handleCopyContract}
+                        className="text-paper/50 hover:text-paper"
+                      >
+                        {copiedContract ? <Check className="w-3 h-3 text-settled" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Submitting State */}
-            {subscribeState === "submitting" && (
-              <div className="py-12 text-center space-y-4">
-                <div className="h-8 w-8 border-2 border-brand border-t-transparent animate-spin mx-auto" />
-                <h4 className="font-display text-sm font-semibold text-paper">
-                  Submitting to the ledger…
-                </h4>
-                <p className="text-xs text-paper/60 leading-relaxed max-w-[320px] mx-auto">
-                  Submitting command with disclosed contracts to Canton Validator. Please do not close or navigate away.
-                </p>
+            {/* Right Column: Subscription Quote Form (5 cols) */}
+            <div className="lg:col-span-5 border border-withheld bg-[#141722] p-6 flex flex-col justify-between space-y-6">
+              <div className="space-y-5">
+                <div className="flex items-center justify-between border-b border-withheld pb-3">
+                  <span className="figure text-[10px] font-bold uppercase tracking-wider text-paper/80">
+                    SUBSCRIPTION ORDER
+                  </span>
+                  <span className="figure text-[10px] text-brand bg-brand/15 border border-brand/30 px-2 py-0.5 uppercase font-semibold">
+                    QUOTED
+                  </span>
+                </div>
+
+                {/* Units Input */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <label className="text-paper/70 font-medium">Units Requested</label>
+                    <span className="text-paper/40 figure text-[11px]">
+                      Max: {offering.unitsRemaining.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <input
+                    type="number"
+                    min={offering.minAllocationUsdc}
+                    max={offering.unitsRemaining}
+                    step={10000}
+                    value={requestedUnits}
+                    onChange={(e) => setRequestedUnits(Number(e.target.value) || 0)}
+                    className="w-full bg-[#0b0d14] border border-withheld px-4 py-2.5 font-mono text-base font-bold text-paper focus:outline-none focus:border-brand"
+                  />
+
+                  {/* Quick percentage buttons */}
+                  <div className="grid grid-cols-4 gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setRequestedUnits(offering.minAllocationUsdc)}
+                      className="py-1 text-[10px] figure bg-[#0e1017] border border-withheld hover:border-brand text-paper/70 hover:text-paper"
+                    >
+                      Min
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRequestedUnits(Math.round(offering.unitsRemaining * 0.25))}
+                      className="py-1 text-[10px] figure bg-[#0e1017] border border-withheld hover:border-brand text-paper/70 hover:text-paper"
+                    >
+                      25%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRequestedUnits(Math.round(offering.unitsRemaining * 0.5))}
+                      className="py-1 text-[10px] figure bg-[#0e1017] border border-withheld hover:border-brand text-paper/70 hover:text-paper"
+                    >
+                      50%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRequestedUnits(offering.unitsRemaining)}
+                      className="py-1 text-[10px] figure bg-[#0e1017] border border-withheld hover:border-brand text-paper/70 hover:text-paper"
+                    >
+                      Max
+                    </button>
+                  </div>
+                </div>
+
+                {/* Calculation Breakdown Matrix */}
+                <div className="space-y-2.5 text-xs bg-[#0b0d14] p-4 border border-withheld">
+                  <div className="flex justify-between text-paper/60">
+                    <span>Price per Unit</span>
+                    <span className="font-mono text-paper">${pricePerUnit.toFixed(2)} USDC</span>
+                  </div>
+                  <div className="flex justify-between text-paper/60">
+                    <span>Gross Consideration</span>
+                    <span className="font-mono text-paper">
+                      ${grossConsideration.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-paper/60">
+                    <span>Platform Settlement Fee (0.1%)</span>
+                    <span className="font-mono text-paper">
+                      ${platformFee.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
+                    </span>
+                  </div>
+
+                  <div className="border-t border-withheld/60 pt-2.5 flex justify-between items-baseline">
+                    <span className="font-semibold text-paper text-xs uppercase figure">Net Total</span>
+                    <span className="font-mono text-lg font-bold text-paper text-brand">
+                      ${netTotalConsideration.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
+                    </span>
+                  </div>
+                </div>
+
+                {/* Available Balance Status */}
+                <div className="flex items-center justify-between text-xs figure text-paper/60 px-1">
+                  <span>Available USDC in Wallet:</span>
+                  <span className={`font-mono font-semibold ${hasSufficientFunds ? "text-settled" : "text-pending"}`}>
+                    ${userUsdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} USDC
+                  </span>
+                </div>
+
+                {executionError && (
+                  <div className="p-3 bg-pending/10 border border-pending/40 text-pending text-xs figure flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{executionError}</span>
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Settled State */}
-            {subscribeState === "settled" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-2 text-settled">
-                  <CheckCircle className="w-5 h-5" />
-                  <h3 className="font-display text-sm font-bold text-paper">
-                    Atomic DvP Settled
-                  </h3>
-                </div>
-
-                <p className="text-xs text-paper/70 leading-relaxed">
-                  Both legs executed in a single Canton transaction. Allocation holding contracts issued to your party.
-                </p>
-
-                <div className="bg-slate border border-withheld p-4 text-xs space-y-2">
-                  <div className="flex justify-between text-paper/60">
-                    <span>Units Acquired</span>
-                    <Figure value={unitsNum} className="font-semibold text-paper" />
-                  </div>
-                  <div className="flex justify-between text-paper/60">
-                    <span>USDC Exchanged</span>
-                    <Figure value={consideration} unit="USDC" className="font-semibold text-paper" />
-                  </div>
-                  <div className="flex justify-between text-paper/60">
-                    <span>Contract CID</span>
-                    <span className="figure font-mono text-[11px] text-settled">{settledTxHash}</span>
-                  </div>
-                </div>
-
+              {/* Action Button */}
+              <div className="space-y-2 pt-2">
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="w-full bg-brand py-2.5 text-xs font-semibold text-paper hover:opacity-90 transition-opacity"
+                  onClick={handleSubscribe}
+                  disabled={isSubmitting || !satisfiesMinAllocation || !satisfiesCapacity}
+                  className="w-full bg-[#D4BBFF] hover:bg-[#c4a5f8] disabled:opacity-50 text-[#151226] font-bold text-xs py-3 px-4 transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
                 >
-                  Close & view portfolio
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-[#151226]/30 border-t-[#151226] rounded-full animate-spin" />
+                      <span>Executing Daml Atomic DvP…</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Subscribe & Lock Allocation</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
-              </div>
-            )}
 
-            {/* Failed State */}
-            {subscribeState === "failed" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-2 text-[#e05252]">
-                  <AlertTriangle className="w-5 h-5" />
-                  <h3 className="font-display text-sm font-bold text-paper">
-                    Settlement Rejected
-                  </h3>
-                </div>
-
-                <p className="text-xs text-paper/70 leading-relaxed">
-                  {errorMessage || "The transaction was rejected by the Canton Ledger API."}
+                <p className="text-[10px] text-paper/40 figure text-center">
+                  By subscribing, you agree to the Offering Memorandum and atomic DvP rules.
                 </p>
-
-                <button
-                  type="button"
-                  onClick={() => setSubscribeState("quoted")}
-                  className="w-full border border-withheld bg-slate py-2.5 text-xs font-semibold text-paper hover:bg-ink transition-colors"
-                >
-                  Try again
-                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

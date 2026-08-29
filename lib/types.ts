@@ -26,6 +26,34 @@ export interface Offering {
   preApprovalRequired: boolean;
 }
 
+export interface PerformanceDataPoint {
+  date: string;
+  timestamp: string;
+  unitPrice: number;
+  holdingValue: number;
+  changePct: number;
+  volumeUsdc?: number;
+}
+
+export interface HoldingHistoricalPerformance {
+  "7d": PerformanceDataPoint[];
+  "30d": PerformanceDataPoint[];
+  "90d": PerformanceDataPoint[];
+  "1y": PerformanceDataPoint[];
+}
+
+export interface HoldingMetrics {
+  costBasisUsdc: number;
+  unrealizedGainUsdc: number;
+  unrealizedGainPct: number;
+  periodReturnPct: number;
+  high52w: number;
+  low52w: number;
+  annualizedVolatilityPct: number;
+  sharpeRatio: number;
+  lastMarkDate: string;
+}
+
 export interface Holding {
   id: string;
   instrumentSymbol: string;
@@ -36,6 +64,8 @@ export interface Holding {
   contractCount: number;
   state: "settled" | "pending_acceptance";
   contractCids: string[];
+  historicalPerformance?: HoldingHistoricalPerformance;
+  metrics?: HoldingMetrics;
 }
 
 export interface SettlementRecord {

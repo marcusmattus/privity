@@ -1,4 +1,195 @@
-import { Offering, Holding, SettlementRecord, EligibilityProfile, PartySession } from "./types";
+import {
+  Offering,
+  Holding,
+  SettlementRecord,
+  EligibilityProfile,
+  PartySession,
+  HoldingHistoricalPerformance,
+  PerformanceDataPoint,
+  HoldingMetrics,
+} from "./types";
+
+// Helper to generate realistic historical time series for any holding asset
+export function generateAssetPerformance(
+  symbol: string,
+  units: number,
+  currentValuation: number,
+  assetType: "Equity" | "Fund Units" | "Stablecoin"
+): { historicalPerformance: HoldingHistoricalPerformance; metrics: HoldingMetrics } {
+  const currentUnitPrice = units > 0 ? currentValuation / units : 1.0;
+  
+  // Growth rate characteristics per asset
+  let baseReturn30d = 0.08;
+  let baseReturn90d = 0.22;
+  let baseReturn1y = 0.45;
+  let baseCostBasis = currentValuation * 0.85;
+  let volatility = 14.5;
+  let sharpe = 1.84;
+
+  if (symbol.includes("AURORA")) {
+    baseReturn30d = 0.142;
+    baseReturn90d = 0.285;
+    baseReturn1y = 0.480;
+    baseCostBasis = currentValuation * 0.82;
+    volatility = 16.2;
+    sharpe = 2.15;
+  } else if (symbol.includes("NOVA")) {
+    baseReturn30d = 0.084;
+    baseReturn90d = 0.182;
+    baseReturn1y = 0.321;
+    baseCostBasis = currentValuation * 0.88;
+    volatility = 11.8;
+    sharpe = 1.92;
+  } else if (symbol.includes("ORION")) {
+    baseReturn30d = 0.185;
+    baseReturn90d = 0.412;
+    baseReturn1y = 0.650;
+    baseCostBasis = currentValuation * 0.76;
+    volatility = 19.4;
+    sharpe = 2.48;
+  } else if (symbol.includes("LYRA")) {
+    baseReturn30d = 0.052;
+    baseReturn90d = 0.118;
+    baseReturn1y = 0.224;
+    baseCostBasis = currentValuation * 0.92;
+    volatility = 9.4;
+    sharpe = 1.65;
+  } else if (symbol === "USDC" || assetType === "Stablecoin") {
+    baseReturn30d = 0.0042; // Yield tracking ~5.1% APY
+    baseReturn90d = 0.0128;
+    baseReturn1y = 0.0512;
+    baseCostBasis = currentValuation;
+    volatility = 0.15;
+    sharpe = 4.80;
+  }
+
+  // 7 Days (daily)
+  const series7d: PerformanceDataPoint[] = [];
+  const days7 = ["May 02", "May 03", "May 04", "May 05", "May 06", "May 07", "May 08"];
+  const return7d = baseReturn30d * 0.22;
+  days7.forEach((date, i) => {
+    const progress = i / (days7.length - 1);
+    const jitter = assetType === "Stablecoin" ? 0 : Math.sin(i * 1.8) * 0.006;
+    const factor = 1 - return7d * (1 - progress) + jitter;
+    const price = currentUnitPrice * factor;
+    const value = units * price;
+    const changePct = ((price / (currentUnitPrice * (1 - return7d)) - 1) * 100);
+    series7d.push({
+      date,
+      timestamp: `2026-05-0${i + 2}T14:00:00Z`,
+      unitPrice: Number(price.toFixed(4)),
+      holdingValue: Math.round(value),
+      changePct: Number(changePct.toFixed(2)),
+      volumeUsdc: Math.round(units * 0.04 * (1 + Math.cos(i))),
+    });
+  });
+
+  // 30 Days (Sampled points across 30 days)
+  const series30d: PerformanceDataPoint[] = [];
+  const days30 = [
+    { label: "Apr 09", day: 1 },
+    { label: "Apr 12", day: 4 },
+    { label: "Apr 15", day: 7 },
+    { label: "Apr 18", day: 10 },
+    { label: "Apr 21", day: 13 },
+    { label: "Apr 24", day: 16 },
+    { label: "Apr 27", day: 19 },
+    { label: "Apr 30", day: 22 },
+    { label: "May 03", day: 25 },
+    { label: "May 06", day: 28 },
+    { label: "May 08", day: 30 },
+  ];
+  days30.forEach((item, i) => {
+    const progress = item.day / 30;
+    const wave = assetType === "Stablecoin" ? 0 : Math.sin(i * 1.3) * 0.015 - Math.cos(i * 0.9) * 0.008;
+    const factor = 1 - baseReturn30d * (1 - progress) + wave;
+    const price = currentUnitPrice * factor;
+    const value = units * price;
+    const changePct = ((price / (currentUnitPrice * (1 - baseReturn30d)) - 1) * 100);
+    series30d.push({
+      date: item.label,
+      timestamp: `2026-04-${String(item.day).padStart(2, "0")}T14:00:00Z`,
+      unitPrice: Number(price.toFixed(4)),
+      holdingValue: Math.round(value),
+      changePct: Number(changePct.toFixed(2)),
+      volumeUsdc: Math.round(units * 0.08 * (1 + Math.sin(i))),
+    });
+  });
+
+  // 90 Days (Sampled bi-weekly points across 90 days)
+  const series90d: PerformanceDataPoint[] = [];
+  const days90 = [
+    { label: "Feb 08", day: 1 },
+    { label: "Feb 22", day: 15 },
+    { label: "Mar 08", day: 30 },
+    { label: "Mar 22", day: 45 },
+    { label: "Apr 05", day: 60 },
+    { label: "Apr 20", day: 75 },
+    { label: "May 08", day: 90 },
+  ];
+  days90.forEach((item, i) => {
+    const progress = item.day / 90;
+    const wave = assetType === "Stablecoin" ? 0 : Math.sin(i * 1.1) * 0.022;
+    const factor = 1 - baseReturn90d * (1 - progress) + wave;
+    const price = currentUnitPrice * factor;
+    const value = units * price;
+    const changePct = ((price / (currentUnitPrice * (1 - baseReturn90d)) - 1) * 100);
+    series90d.push({
+      date: item.label,
+      timestamp: `2026-02-${String(item.day).padStart(2, "0")}T14:00:00Z`,
+      unitPrice: Number(price.toFixed(4)),
+      holdingValue: Math.round(value),
+      changePct: Number(changePct.toFixed(2)),
+      volumeUsdc: Math.round(units * 0.12 * (1 + Math.cos(i))),
+    });
+  });
+
+  // 1 Year (Monthly points)
+  const series1y: PerformanceDataPoint[] = [];
+  const months1y = [
+    "May 25", "Jun 25", "Jul 25", "Aug 25", "Sep 25", "Oct 25",
+    "Nov 25", "Dec 25", "Jan 26", "Feb 26", "Mar 26", "Apr 26", "May 26"
+  ];
+  months1y.forEach((date, i) => {
+    const progress = i / (months1y.length - 1);
+    const wave = assetType === "Stablecoin" ? 0 : Math.sin(i * 0.8) * 0.035;
+    const factor = 1 - baseReturn1y * (1 - progress) + wave;
+    const price = currentUnitPrice * factor;
+    const value = units * price;
+    const changePct = ((price / (currentUnitPrice * (1 - baseReturn1y)) - 1) * 100);
+    series1y.push({
+      date,
+      timestamp: `2025-${String(i + 5).padStart(2, "0")}-01T14:00:00Z`,
+      unitPrice: Number(price.toFixed(4)),
+      holdingValue: Math.round(value),
+      changePct: Number(changePct.toFixed(2)),
+      volumeUsdc: Math.round(units * 0.25 * (1 + Math.sin(i * 0.5))),
+    });
+  });
+
+  const unrealizedGain = currentValuation - baseCostBasis;
+  const unrealizedGainPct = baseCostBasis > 0 ? (unrealizedGain / baseCostBasis) * 100 : 0;
+
+  return {
+    historicalPerformance: {
+      "7d": series7d,
+      "30d": series30d,
+      "90d": series90d,
+      "1y": series1y,
+    },
+    metrics: {
+      costBasisUsdc: Math.round(baseCostBasis),
+      unrealizedGainUsdc: Math.round(unrealizedGain),
+      unrealizedGainPct: Number(unrealizedGainPct.toFixed(2)),
+      periodReturnPct: Number((baseReturn30d * 100).toFixed(2)),
+      high52w: Number((currentUnitPrice * 1.05).toFixed(4)),
+      low52w: Number((currentUnitPrice * (1 - baseReturn1y * 0.9)).toFixed(4)),
+      annualizedVolatilityPct: volatility,
+      sharpeRatio: sharpe,
+      lastMarkDate: "8 May 2026 14:31 UTC",
+    },
+  };
+}
 
 export const INITIAL_OFFERINGS: Offering[] = [
   {
@@ -122,6 +313,7 @@ export const INITIAL_HOLDINGS: Holding[] = [
       "004a8b79f82d1c63e41209bca7f93802e3b1c6d9-02",
       "004a8b79f82d1c63e41209bca7f93802e3b1c6d9-03",
     ],
+    ...generateAssetPerformance("AURORA-SEQ-1", 250000.0, 250000.0, "Equity"),
   },
   {
     id: "h-nova",
@@ -136,6 +328,7 @@ export const INITIAL_HOLDINGS: Holding[] = [
       "0091c3ef7182a5371c6d4829fa771829e018a7c-01",
       "0091c3ef7182a5371c6d4829fa771829e018a7c-02",
     ],
+    ...generateAssetPerformance("NOVA GROWTH FUND", 125000.0, 125000.0, "Fund Units"),
   },
   {
     id: "h-orion",
@@ -153,6 +346,7 @@ export const INITIAL_HOLDINGS: Holding[] = [
       "00bf9918237c182937ac19827391726381928371-04",
       "00bf9918237c182937ac19827391726381928371-05",
     ],
+    ...generateAssetPerformance("ORION SERIES A", 750000.0, 750000.0, "Equity"),
   },
   {
     id: "h-lyra",
@@ -164,6 +358,7 @@ export const INITIAL_HOLDINGS: Holding[] = [
     contractCount: 1,
     state: "pending_acceptance",
     contractCids: ["00a4f382910384729184719283719283719283-01"],
+    ...generateAssetPerformance("LYRA TOKEN R1", 500000.0, 500000.0, "Equity"),
   },
   {
     id: "h-usdc",
@@ -175,6 +370,7 @@ export const INITIAL_HOLDINGS: Holding[] = [
     contractCount: 14,
     state: "settled",
     contractCids: ["00128371829381729381273918273918273918-all"],
+    ...generateAssetPerformance("USDC", 3606945.0, 3606945.0, "Stablecoin"),
   },
 ];
 
