@@ -19,13 +19,22 @@ Canton's execution model, in the vocabulary the buyers already use.
 ## Architecture
 
 ```
-browser  ->  Next.js server routes  ->  ledger-service (FastAPI)  ->  Canton
+browser (dApp SDK)  ->  Wallet Gateway  ->  Canton validator
+                              |
+                              +->  signing provider (participant / custodian)
+
+Next.js server routes  ->  ledger-service (FastAPI)  ->  Canton   [reads only]
                      |
                      +->  Supabase  (index + audit; a PROJECTION, not truth)
 ```
 
-No Canton credential, party key, or `C8_*` variable ever reaches the client
-bundle. `lib/ledger.ts` imports `server-only` to make that a build error.
+**We never hold keys.** Users connect their own wallet through a Canton Wallet
+Gateway, and their signing provider signs. There is no managed party and no
+custodial submission — see `docs/canton-integration.md`.
+
+Reads still flow through `ledger-service`, which holds the `C8_*` credentials
+server-side. `lib/ledger.ts` imports `server-only` so a client component pulling
+it in is a build error.
 
 ## Getting started
 
@@ -51,10 +60,15 @@ Build against **LocalNet**: the toolkit flags DevNet party allocation as unverif
 
 ## Status
 
-Phase 0 — scaffold. Landing hero, design system, ledger bridge, schema.
+Phase 0 — scaffold. Landing hero, design system, ledger bridge, schema,
+Daml model, wallet connect.
 
-Next: `app/signin`, `POST /api/party/ensure`, portfolio reading the index.
-See `docs/` for the full phased build.
+**Before anything else:** `npm install @canton-network/dapp-sdk` and pin the
+resolved version. `package.json` says `"latest"` because the correct version was
+not verified at scaffold time. Then verify every call in `lib/wallet.ts` against
+that version's README — the SDK is pre-1.0 and the shapes there have not been run.
+
+Next: `dpm test` green, then portfolio reading the index.
 
 ## Docs
 
@@ -63,3 +77,4 @@ See `docs/` for the full phased build.
 | `docs/build-prompt.md` | Phases, data model, API surface, permission model |
 | `docs/landing-page.md` | Brand, tokens, logo, landing structure, copy rules |
 | `docs/ui-screens.md` | Every app screen, state by state |
+| `docs/canton-integration.md` | Wallet Gateway topology, local setup, dpm toolchain |

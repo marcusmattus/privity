@@ -1,0 +1,95 @@
+module Privity where
+
+-- Privity — eligibility and atomic delivery-versus-payment.
+--
+-- The whole product argument lives in the `Subscribe` choice below: an
+-- ineligible buyer is refused BY THE LEDGER, and both legs move in one
+-- transaction or neither does.
+--
+-- NOTE: this is a self-contained model for the demo. Production must route
+-- payment through the Canton Token Standard transfer factory (ask the registry
+-- for the factory and choice context, attach disclosed contracts). Do not ship
+-- a hand-rolled cash leg.
+
+template Eligibility
+  with
+    issuer       : Party
+    holder       : Party
+    jurisdiction : Text
+    tier         : Text
+    expiresAt    : Time
+  where
+    signatory issuer
+    observer holder
+    key (issuer, holder) : (Party, Party)
+    maintainer key._1
+
+template FundUnit
+  with
+    issuer     : Party
+    owner      : Party
+    instrument : Text
+    amount     : Decimal
+  where
+    signatory issuer
+    observer owner
+    ensure amount > 0.0
+
+template Cash
+  with
+    issuer : Party
+    owner  : Party
+    amount : Decimal
+  where
+    signatory issuer
+    observer owner
+    ensure amount > 0.0
+
+template SubscriptionOffer
+  with
+    issuer        : Party
+    seller        : Party
+    buyer         : Party
+    instrument    : Text
+    units         : Decimal
+    consideration : Decimal
+  where
+    signatory seller, issuer
+    observer buyer
+
+    -- Atomic DvP. Buyer is the controller, so it is their authorisation that
+    -- moves both legs. Every `assertAfter`/`fetchByKey` below is a precondition
+    -- the ledger enforces before anything is created.
+    choice Subscribe : (ContractId FundUnit, ContractId Cash)
+      with
+        buyerCash : ContractId Cash
+      controller buyer
+      do
+        now <- getTime
+
+        -- Eligibility gate. No backend check involved.
+        (_, elig) <- fetchByKey @Eligibility (issuer, buyer)
+        assertMsg "eligibility expired" (elig.expiresAt > now)
+
+        cash <- fetch buyerCash
+        assertMsg "cash not owned by buyer" (cash.owner == buyer)
+        assertMsg "insufficient consideration" (cash.amount >= consideration)
+
+        -- Both legs, one transaction. Archive then create — contracts are
+        -- immutable, so a transfer is always archive + create, never a mutation.
+        archive buyerCash
+
+        units' <- create FundUnit with
+          issuer, owner = buyer, instrument, amount = units
+
+        paid <- create Cash with
+          issuer = cash.issuer, owner = seller, amount = consideration
+
+        -- Change back to the buyer, if any.
+        let change = cash.amount - consideration
+        when (change > 0.0) do
+          _ <- create Cash with
+            issuer = cash.issuer, owner = buyer, amount = change
+          pure ()
+
+        pure (units', paid)

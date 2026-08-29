@@ -1,0 +1,49 @@
+module Test where
+
+import Daml.Script
+import DA.Time (addRelTime, days)
+import Privity
+
+-- The demo, as a test. Both assertions are the pitch.
+testSubscribe : Script ()
+testSubscribe = script do
+  issuer <- allocateParty "Issuer"
+  seller <- allocateParty "Seller"
+  buyer  <- allocateParty "Buyer"
+  now    <- getTime
+
+  _ <- submit issuer do
+    createCmd Eligibility with
+      issuer, holder = buyer
+      jurisdiction = "GB", tier = "professional"
+      expiresAt = addRelTime now (days 365)
+
+  cash <- submit issuer do
+    createCmd Cash with issuer, owner = buyer, amount = 1000000.0
+
+  offer <- submitMulti [seller, issuer] [] do
+    createCmd SubscriptionOffer with
+      issuer, seller, buyer
+      instrument = "ORCA-A", units = 1200.0, consideration = 840000.0
+
+  -- Eligible buyer: both legs move in one transaction.
+  _ <- submit buyer do exerciseCmd offer Subscribe with buyerCash = cash
+  pure ()
+
+-- An ineligible buyer is refused by the LEDGER, with no backend check running.
+testIneligibleRejected : Script ()
+testIneligibleRejected = script do
+  issuer   <- allocateParty "Issuer"
+  seller   <- allocateParty "Seller"
+  stranger <- allocateParty "Stranger"
+
+  cash <- submit issuer do
+    createCmd Cash with issuer, owner = stranger, amount = 1000000.0
+
+  offer <- submitMulti [seller, issuer] [] do
+    createCmd SubscriptionOffer with
+      issuer, seller, buyer = stranger
+      instrument = "ORCA-A", units = 1200.0, consideration = 840000.0
+
+  -- No Eligibility contract exists for this party. Submission fails.
+  submitMustFail stranger do exerciseCmd offer Subscribe with buyerCash = cash
