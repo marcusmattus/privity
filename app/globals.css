@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Colour encodes VISIBILITY, not hierarchy.
+    --paper     you are party to this
+    --withheld  you are not party to this
+    --brand     identity and primary action ONLY. Never a state.
+*/
+:root {
+  --ink: #0b0d14;
+  --slate: #14161f;
+  --withheld: #262a38;
+  --paper: #ecedf2;
+  --brand: #6d3af2;
+  --settled: #46a88c;
+  --pending: #c6973f;
+}
+
+html, body {
+  background: var(--ink);
+  color: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every figure is tabular. No exceptions. */
+.figure {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
