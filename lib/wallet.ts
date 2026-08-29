@@ -38,8 +38,7 @@ async function sdk() {
  * (postMessage), so we do not hardcode a provider.
  */
 export async function connect(): Promise<WalletSession> {
-  const dapp = await sdk();
-  // @ts-expect-error — verify against the pinned SDK version's README.
+  const dapp: any = await sdk();
   client = await dapp.connect({ appName: "Privity" });
 
   const accounts = await listAccounts();
@@ -51,14 +50,12 @@ export async function connect(): Promise<WalletSession> {
 }
 
 export async function listAccounts(): Promise<string[]> {
-  const dapp = await sdk();
-  // @ts-expect-error — verify against the pinned SDK version's README.
+  const dapp: any = await sdk();
   return dapp.request({ method: "canton_accounts" });
 }
 
 export async function disconnect(): Promise<void> {
-  const dapp = await sdk();
-  // @ts-expect-error — verify against the pinned SDK version's README.
+  const dapp: any = await sdk();
   await dapp.disconnect?.();
   client = null;
 }
@@ -71,8 +68,7 @@ export async function disconnect(): Promise<void> {
  * never treat a resolved promise here as proof of settlement. Read the result.
  */
 export async function executeCommand(command: unknown): Promise<unknown> {
-  const dapp = await sdk();
-  // @ts-expect-error — verify against the pinned SDK version's README.
+  const dapp: any = await sdk();
   return dapp.request({ method: "canton_executeTransaction", params: [command] });
 }
 

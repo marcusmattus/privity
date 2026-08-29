@@ -1,0 +1,6 @@
+{
+  "name": "Privity — settlement nobody else can see",
+  "description": "Tokenised allocations settled atomically against stablecoin on Canton. Counterparties see the trade. Nobody else does.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
